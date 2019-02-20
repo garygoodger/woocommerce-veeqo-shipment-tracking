@@ -20,7 +20,7 @@ Veeqo Shipment integration - https://www.veeqo.com/
 
 ### Installing
 
-Clone the repot into your plugins folder
+Clone the repo into your plugins folder
 
 ```
 git clone https://github.com/garygoodger/woocommerce-veeqo-shipment-tracking.git
