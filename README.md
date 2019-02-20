@@ -10,7 +10,7 @@ Coming soon.
 
 ### Prerequisites
 
-What things you need to install the software and how to install them
+What things you need for the plugin to work
 
 ```
 Wordpress v5 (may work on previous versions, however it's untested)
