@@ -10,9 +10,9 @@
 
 if( !defined( 'ABSPATH' ) ) exit;
 
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+//ini_set('display_errors', 1);
+//ini_set('display_startup_errors', 1);
+//error_reporting(E_ALL);
 
 new WC_Veeqo_Shipment_Tracking();
 class WC_Veeqo_Shipment_Tracking{
@@ -24,25 +24,19 @@ class WC_Veeqo_Shipment_Tracking{
 			'orders_to_check' => 'wc_veeqo_shipment_tracking_orders_to_check'
 		);
 		
-		//add_action( 'init', array( $this, 'load_plugin_textdomain' ) );
-		
-		add_action( 'woocommerce_new_order', 'add_order_to_check_shipment_later' );
+		add_action( 'woocommerce_new_order', array( $this, 'add_order_to_check_shipment_later' ) );
 		
 		if ( ! wp_next_scheduled( 'wc_veeqo_shipment_tracking_check_orders_shipment' ) ) {
 			wp_schedule_event( time(), 'hourly', 'wc_veeqo_shipment_tracking_check_orders_shipment' );
 		}
-		//add_action( 'wc_veeqo_shipment_tracking_check_orders_shipment', array( $this, 'check_orders_shipment' ) );
-	}
-	
-	public function load_plugin_textdomain(){
-		load_plugin_textdomain( 'wc_veeqo_shipment_tracking', false, dirname( plugin_basename( __FILE__ ) ) . '/languages/' );
+		add_action( 'wc_veeqo_shipment_tracking_check_orders_shipment', array( $this, 'check_orders_shipment' ) );
 	}
 	
 	public function log_error( $message ){
 		if ( empty( self::$log ) ) {
 			self::$log = new WC_Logger();
 		}
-		self::$log->add( 'wc_veeqo_shipment_tracking', $message );
+		self::$log->log( 'error', $message, 'wc_veeqo_shipment_tracking' );
 	}
 	
 	public function add_order_to_check_shipment_later( $order_id ){
@@ -60,23 +54,34 @@ class WC_Veeqo_Shipment_Tracking{
 			$option_name = self::$option_names['orders_to_check'];
 			$orders_to_check = get_option( $option_name );
 			if( empty($orders_to_check) ){
-				$orders_to_check = array( 6483 );
-				//return;
+				return;
 			}
-			if( !function_exists( 'wc_st_add_tracking_number' ) ){
+			if( !class_exists( 'WC_Shipment_Tracking_Actions' ) ){
 				throw new Exception( 'Plugin WC Shipment Tracking is not activated' );
 			}
 			foreach($orders_to_check as $key => $order_id){
-				$shipment_info = $this->search_comment_with_shipment_info( $order_id );
-				if( $shipment_info === false ){
-					continue;
+				$st = WC_Shipment_Tracking_Actions::get_instance();
+				$tracking_items = $st->get_tracking_items( $order_id );
+				
+				if( empty($tracking_items) ){
+					$shipment_info = $this->search_comment_with_shipment_info( $order_id );
+					if( $shipment_info === false ){
+						continue;
+					}
+					
+					wc_st_add_tracking_number( $order_id, $shipment_info['tracking_number'], $shipment_info['carrier'], $shipment_info['date'] );
+				
+					$order = wc_get_order( $order_id );
+					$order->update_status( 'completed' );
+					
+					$this->trigger_complete_order_email( $order_id );
 				}
-				wc_st_add_tracking_number( $order_id, $shipment_info['tracking_number'], $shipment_info['carrier'], $shipment_info['date']->format('u') );
-				unset($orders_to_check[$key]);
+				
+				unset($orders_to_check[$key], $order);
 				update_option( $option_name, $orders_to_check );
 			}
 		}catch(Exception $e){
-			$this->log_error( $e->getTraceAsString() );
+			$this->log_error( $e->getMessage() . "\n" . $e->getTraceAsString() . "\n________________\n" );
 		}
 	}
 	
@@ -86,17 +91,28 @@ class WC_Veeqo_Shipment_Tracking{
 		);
 		$order_notes = wc_get_order_notes( $args );
 		foreach($order_notes as $order_note){
-			if( preg_match( '/^Carrier:\s(.+)\nService:\s(.+)\nTracking Number:\s(.+)$/', $order_note->content, $matches ) ){
+			if( preg_match( '/^Carrier:\s(.+)\n.?Tracking Number:\s(.+)$/', $order_note->content, $matches ) ){
 				$shipment_info = array(
 					'comment' => $matches[0],
 					'carrier' => $matches[1],
-					'service' => $matches[2],
-					'tracking_number' => $matches[3],
-					'date' => $order_note->date_created
+					'tracking_number' => $matches[2],
+					'date' => $order_note->date_created->getTimestamp()
 				);
 				return $shipment_info;
 			}
 		}
 		return false;
+	}
+	
+	public function trigger_complete_order_email( $order_id ){
+		$mailer = WC()->mailer();
+		$mails = $mailer->get_emails();
+		if( ! empty( $mails ) ){
+			foreach($mails as $mail){
+				if( $mail->id == 'customer_completed_order' ){
+					$mail->trigger( $order_id );
+				}
+			}
+		}
 	}
 }
