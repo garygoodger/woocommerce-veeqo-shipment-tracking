@@ -28,6 +28,8 @@ git clone https://github.com/garygoodger/woocommerce-veeqo-shipment-tracking.git
 
 Activate the plugin
 
+The plugin will check for newly shipped orders once per hour, any new orders that have been shipped in Veeqo will update on the next scheduled run.
+
 ## Authors
 
 * **Gary Goodger**
