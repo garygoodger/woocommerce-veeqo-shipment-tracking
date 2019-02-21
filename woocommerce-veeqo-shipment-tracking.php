@@ -4,7 +4,7 @@
  * Description: Integrating Veeqo with shipment tracking
  * Author: John Zuxer
  * Author URI: https://www.upwork.com/freelancers/~01f35acec4c4e5f366
- * Version: 1.0
+ * Version: 1.1
  * License: GPL2 or later
  */
 
@@ -59,22 +59,25 @@ class WC_Veeqo_Shipment_Tracking{
 			if( !class_exists( 'WC_Shipment_Tracking_Actions' ) ){
 				throw new Exception( 'Plugin WC Shipment Tracking is not activated' );
 			}
+			$allowed_statuses = array( 'pending', 'processing', 'on-hold', 'completed' );
 			foreach($orders_to_check as $key => $order_id){
-				$st = WC_Shipment_Tracking_Actions::get_instance();
-				$tracking_items = $st->get_tracking_items( $order_id );
-				
-				if( empty($tracking_items) ){
-					$shipment_info = $this->search_comment_with_shipment_info( $order_id );
-					if( $shipment_info === false ){
-						continue;
+				$order = wc_get_order( $order_id );
+				if( !empty($order) && in_array( $order->get_status(), $allowed_statuses ) ){
+					$st = WC_Shipment_Tracking_Actions::get_instance();
+					$tracking_items = $st->get_tracking_items( $order_id );
+					
+					if( empty($tracking_items) ){
+						$shipment_info = $this->search_comment_with_shipment_info( $order_id );
+						if( $shipment_info === false ){
+							continue;
+						}
+						
+						wc_st_add_tracking_number( $order_id, $shipment_info['tracking_number'], $shipment_info['carrier'], $shipment_info['date'] );
+						
+						$order->update_status( 'completed' );
+						
+						$this->trigger_complete_order_email( $order_id );
 					}
-					
-					wc_st_add_tracking_number( $order_id, $shipment_info['tracking_number'], $shipment_info['carrier'], $shipment_info['date'] );
-				
-					$order = wc_get_order( $order_id );
-					$order->update_status( 'completed' );
-					
-					$this->trigger_complete_order_email( $order_id );
 				}
 				
 				unset($orders_to_check[$key], $order);
