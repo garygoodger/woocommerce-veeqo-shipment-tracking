@@ -4,7 +4,7 @@
  * Description: Integrating Veeqo with shipment tracking
  * Author: John Zuxer
  * Author URI: https://www.upwork.com/freelancers/~01f35acec4c4e5f366
- * Version: 1.1
+ * Version: 1.2
  * License: GPL2 or later
  */
 
@@ -94,11 +94,11 @@ class WC_Veeqo_Shipment_Tracking{
 		);
 		$order_notes = wc_get_order_notes( $args );
 		foreach($order_notes as $order_note){
-			if( preg_match( '/^Carrier:\s(.+)\n.?Tracking Number:\s(.+)$/', $order_note->content, $matches ) ){
+			if( preg_match( '/^Carrier:\s(.+)(?:\n.?Tracking Number:\s(.+)$)?/', $order_note->content, $matches ) ){
 				$shipment_info = array(
 					'comment' => $matches[0],
 					'carrier' => $matches[1],
-					'tracking_number' => $matches[2],
+					'tracking_number' => isset($matches[2]) ? $matches[2] : '',
 					'date' => $order_note->date_created->getTimestamp()
 				);
 				return $shipment_info;
