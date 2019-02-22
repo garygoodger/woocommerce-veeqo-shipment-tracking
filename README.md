@@ -15,6 +15,7 @@ What things you need for the plugin to work
 ```
 Wordpress v5 (may work on previous versions, however it's untested)
 WooCommerce
+WooCommerce Shipment Tracking Plugin
 Veeqo Shipment integration - https://www.veeqo.com/
 ```
 
