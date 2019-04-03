@@ -4,7 +4,7 @@
  * Description: Integrating Veeqo with shipment tracking
  * Author: John Zuxer
  * Author URI: https://www.upwork.com/freelancers/~01f35acec4c4e5f366
- * Version: 1.2
+ * Version: 1.3
  * License: GPL2 or later
  */
 
@@ -94,11 +94,20 @@ class WC_Veeqo_Shipment_Tracking{
 		);
 		$order_notes = wc_get_order_notes( $args );
 		foreach($order_notes as $order_note){
-			if( preg_match( '/^Carrier:\s(.+)(?:\n.?Tracking Number:\s(.+)$)?/', $order_note->content, $matches ) ){
+			//preg_match( '/^Carrier:\s(.+)(?:\n.?Tracking Number:\s(.+)$)?/', $order_note->content, $matches )
+			$lines = explode("\n", $order_note->content);
+			$carrier = array_filter($order_note->content, function($line){
+				return strpos($line, 'Carrier:') !== false;
+			});
+			if( !empty($carrier) ){
+				$carrier = preg_replace('/Carrier:\s/', '', reset($carrier));
+				$tracking_number = array_filter($order_note->content, function($line){
+					return strpos($line, 'Tracking Number:') !== false;
+				});
+				$tracking_number = empty($tracking_number) ? '' : preg_replace('/Tracking Number:\s/', '', reset($tracking_number));
 				$shipment_info = array(
-					'comment' => $matches[0],
-					'carrier' => $matches[1],
-					'tracking_number' => isset($matches[2]) ? $matches[2] : '',
+					'carrier' => $carrier,
+					'tracking_number' => $tracking_number,
 					'date' => $order_note->date_created->getTimestamp()
 				);
 				return $shipment_info;
