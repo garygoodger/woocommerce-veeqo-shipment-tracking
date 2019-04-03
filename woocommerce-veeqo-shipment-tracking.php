@@ -30,6 +30,51 @@ class WC_Veeqo_Shipment_Tracking{
 			wp_schedule_event( time(), 'hourly', 'wc_veeqo_shipment_tracking_check_orders_shipment' );
 		}
 		add_action( 'wc_veeqo_shipment_tracking_check_orders_shipment', array( $this, 'check_orders_shipment' ) );
+		
+		//add_action( 'plugins_loaded', array( $this, 'test' ) );
+	}
+	
+	public function test(){
+		$order_id = 6511;
+		$order = wc_get_order( $order_id );
+		$args = array(
+			'order_id' => $order_id
+		);
+		$order_notes = wc_get_order_notes( $args );
+		echo '<pre>';
+		foreach($order_notes as $order_note){
+			$lines = explode("\n", $order_note->content);
+			$carrier = array_filter($lines, function($line){
+				return strpos($line, 'Carrier:') !== false;
+			});
+			if( !empty($carrier) ){
+				$carrier = preg_replace("/Carrier:\s/", '', reset($carrier));
+				$tracking_number = array_filter($lines, function($line){
+					return strpos($line, 'Tracking Number:') !== false;
+				});
+				$tracking_number = empty($tracking_number) ? '' : preg_replace("/Tracking Number:\s/", '', reset($tracking_number));
+				$shipment_info = array(
+					'carrier' => $carrier,
+					'tracking_number' => $tracking_number,
+					'date' => $order_note->date_created->getTimestamp()
+				);
+				break;
+			}
+			/*
+			if( preg_match( '/(?:^|\n)Carrier:\s(.+)(?:\n|$)(?:.*(?:^|\n)?Tracking Number:\s(.+)(?:\n|$))?/', $order_note->content, $matches ) ){
+				$shipment_info = array(
+					'comment' => $matches[0],
+					'carrier' => $matches[1],
+					'tracking_number' => isset($matches[2]) ? $matches[2] : '',
+					'date' => $order_note->date_created->getTimestamp()
+				);
+				var_dump($order_note);
+				var_dump($matches);
+			}
+			*/
+		}
+		echo '</pre>';
+		wp_die();
 	}
 	
 	public function log_error( $message ){
@@ -96,15 +141,15 @@ class WC_Veeqo_Shipment_Tracking{
 		foreach($order_notes as $order_note){
 			//preg_match( '/^Carrier:\s(.+)(?:\n.?Tracking Number:\s(.+)$)?/', $order_note->content, $matches )
 			$lines = explode("\n", $order_note->content);
-			$carrier = array_filter($order_note->content, function($line){
+			$carrier = array_filter($lines, function($line){
 				return strpos($line, 'Carrier:') !== false;
 			});
 			if( !empty($carrier) ){
-				$carrier = preg_replace('/Carrier:\s/', '', reset($carrier));
-				$tracking_number = array_filter($order_note->content, function($line){
+				$carrier = preg_replace("/Carrier:\s/", '', reset($carrier));
+				$tracking_number = array_filter($lines, function($line){
 					return strpos($line, 'Tracking Number:') !== false;
 				});
-				$tracking_number = empty($tracking_number) ? '' : preg_replace('/Tracking Number:\s/', '', reset($tracking_number));
+				$tracking_number = empty($tracking_number) ? '' : preg_replace("/Tracking Number:\s/", '', reset($tracking_number));
 				$shipment_info = array(
 					'carrier' => $carrier,
 					'tracking_number' => $tracking_number,
