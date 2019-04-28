@@ -119,6 +119,19 @@ class WC_Veeqo_Shipment_Tracking{
 						
 						wc_st_add_tracking_number( $order_id, $shipment_info['tracking_number'], $shipment_info['carrier'], $shipment_info['date'] );
 						
+						if( class_exists('WpLister_Order_MetaBox') ){
+							$ebay_order_id = get_post_meta( $order_id, '_ebay_order_id', true );
+							if( $ebay_order_id ){
+								$_REQUEST['order_id'] = $order_id;
+								$_REQUEST['wpl_tracking_provider'] = $shipment_info['carrier'];
+								$_REQUEST['wpl_tracking_number'] = $shipment_info['tracking_number'];
+								$_REQUEST['wpl_date_shipped'] = $shipment_info['date'];
+								$_REQUEST['wpl_feedback_text'] = '';
+								$_REQUEST['wpl_order_paid'] = 1;
+								WpLister_Order_MetaBox::update_ebay_feedback();
+							}
+						}
+						
 						$order->update_status( 'completed' );
 						
 						$this->trigger_complete_order_email( $order_id );
@@ -149,7 +162,7 @@ class WC_Veeqo_Shipment_Tracking{
 				$tracking_number = array_filter($lines, function($line){
 					return strpos($line, 'Tracking Number:') !== false;
 				});
-				$tracking_number = empty($tracking_number) ? '' : preg_replace("/Tracking Number:\s/", '', reset($tracking_number));
+				$tracking_number = empty($tracking_number) ? '' : preg_replace( "/Tracking Number:\s/", '', reset($tracking_number) );
 				$shipment_info = array(
 					'carrier' => $carrier,
 					'tracking_number' => $tracking_number,
