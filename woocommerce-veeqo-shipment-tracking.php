@@ -131,7 +131,11 @@ class WC_Veeqo_Shipment_Tracking{
 									'wpl_feedback_text' => '',
 									'wpl_order_paid' => 1
 								);
-								$this->send_ebay_request($data);
+								$ebay_update_response = $this->send_ebay_request($data);
+								$this->log_error( 'ebay_update_response: ' . $ebay_update_response );
+								if( !$ebay_update_response->success ){
+									continue;
+								}
 							}
 						}
 						
@@ -190,6 +194,7 @@ class WC_Veeqo_Shipment_Tracking{
 	}
 	
 	public function send_ebay_request( $data ){
+		ini_set('max_execution_time', 40);
 		$curl = curl_init();
 
 		curl_setopt_array($curl, array(
@@ -212,7 +217,7 @@ class WC_Veeqo_Shipment_Tracking{
 
 		curl_close($curl);
 		
-		if( !$response ){
+		if( curl_error($curl) ){
 			$this->log_error( curl_error($curl) . curl_errno($curl) );
 		}
 		
