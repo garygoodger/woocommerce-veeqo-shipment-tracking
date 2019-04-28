@@ -131,9 +131,9 @@ class WC_Veeqo_Shipment_Tracking{
 									'wpl_feedback_text' => '',
 									'wpl_order_paid' => 1
 								);
-								$ebay_update_response = $this->send_ebay_request($data);
+								$ebay_update_response = $this->update_ebay_feedback($data);
 								$this->log_error( 'ebay_update_response: ' . $ebay_update_response );
-								if( !$ebay_update_response->success ){
+								if( empty($ebay_update_response) || !$ebay_update_response->success ){
 									continue;
 								}
 							}
@@ -192,6 +192,59 @@ class WC_Veeqo_Shipment_Tracking{
 			}
 		}
 	}
+	
+	public function update_ebay_feedback($raw_data){
+
+		// get field values
+        $post_id 					= $raw_data['order_id'];
+		$wpl_tracking_provider		= esc_attr( $raw_data['wpl_tracking_provider'] );
+		$wpl_tracking_number 		= esc_attr( $raw_data['wpl_tracking_number'] );
+		$wpl_date_shipped			= esc_attr( strtotime( $raw_data['wpl_date_shipped'] ) );
+		$wpl_feedback_text 			= esc_attr( $raw_data['wpl_feedback_text'] );
+		$wpl_order_paid             = isset( $raw_data['wpl_order_paid'] ) ? $raw_data['wpl_order_paid'] : 1;
+
+		// if tracking number is set, but date is missing, set date today.
+		if ( trim($wpl_tracking_number) != '' ) {
+			if ( $wpl_date_shipped == '' ) $wpl_date_shipped = gmdate('U');
+		}
+
+		// build array
+		$data = array();
+		$data['TrackingNumber']  = trim( $wpl_tracking_number );
+		$data['TrackingCarrier'] = trim( $wpl_tracking_provider );
+		$data['ShippedTime']     = trim( $wpl_date_shipped );
+		$data['FeedbackText']    = trim( $wpl_feedback_text );
+		$data['Paid']            = $wpl_order_paid;
+
+		// if feedback text is empty, use default feedback text
+		if ( ! $data['FeedbackText'] ) {
+			$data['FeedbackText'] = get_option( 'wplister_default_feedback_text', '' );
+		}
+
+    	// check if this order came in from eBay
+        $ebay_order_id = get_post_meta( $post_id, '_ebay_order_id', true );
+    	if ( ! $ebay_order_id ) die('This is not an eBay order.');
+
+    	// moved to self::callCompleteOrder() so it will be triggered for do_action(wple_complete_sale_on_ebay)
+    	//$data = apply_filters( 'wplister_complete_order_data', $data, $post_id );
+
+    	// complete sale on eBay
+		$response = WpLister_Order_MetaBox::callCompleteOrder( $post_id, $data );
+
+		// WPLE()->initEC();
+		// $response = WPLE()->EC->completeOrder( $post_id, $data );
+		// WPLE()->EC->closeEbay();
+
+		// Update order data if request was successful
+		if ( $response->success ) {
+			update_post_meta( $post_id, '_tracking_provider', $wpl_tracking_provider );
+			update_post_meta( $post_id, '_tracking_number', $wpl_tracking_number );
+			update_post_meta( $post_id, '_date_shipped', $wpl_date_shipped );
+			update_post_meta( $post_id, '_feedback_text', $wpl_feedback_text );
+		}
+
+        return $response;
+    }
 	
 	public function send_ebay_request( $data ){
 		ini_set('max_execution_time', 40);
