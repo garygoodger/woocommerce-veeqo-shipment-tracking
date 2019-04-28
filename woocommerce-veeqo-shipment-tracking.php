@@ -35,7 +35,7 @@ class WC_Veeqo_Shipment_Tracking{
 	}
 	
 	public function test(){
-		$order_id = 6511;
+		$order_id = 6526;
 		$order = wc_get_order( $order_id );
 		$args = array(
 			'order_id' => $order_id
@@ -43,6 +43,12 @@ class WC_Veeqo_Shipment_Tracking{
 		$order_notes = wc_get_order_notes( $args );
 		echo '<pre>';
 		foreach($order_notes as $order_note){
+			var_dump( $order_note->date_created );
+			var_dump( $order_note->date_created->getTimestamp() );
+			var_dump( strtotime( DateTime::createFromFormat( 'U', $order_note->date_created->getTimestamp() )->format('Y-m-d') ) );
+			var_dump( strtotime( $order_note->date_created ) );
+			var_dump( strtotime( $order_note->date_created->getTimestamp() ) );
+			break;
 			$lines = explode("\n", $order_note->content);
 			$carrier = array_filter($lines, function($line){
 				return strpos($line, 'Carrier:') !== false;
@@ -125,7 +131,7 @@ class WC_Veeqo_Shipment_Tracking{
 								$_REQUEST['order_id'] = $order_id;
 								$_REQUEST['wpl_tracking_provider'] = $shipment_info['carrier'];
 								$_REQUEST['wpl_tracking_number'] = $shipment_info['tracking_number'];
-								$_REQUEST['wpl_date_shipped'] = $shipment_info['date'];
+								$_REQUEST['wpl_date_shipped'] = DateTime::createFromFormat( 'U', $shipment_info['date'] )->format('Y-m-d');
 								$_REQUEST['wpl_feedback_text'] = '';
 								$_REQUEST['wpl_order_paid'] = 1;
 								WpLister_Order_MetaBox::update_ebay_feedback();
