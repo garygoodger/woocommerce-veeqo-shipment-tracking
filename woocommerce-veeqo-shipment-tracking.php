@@ -43,12 +43,6 @@ class WC_Veeqo_Shipment_Tracking{
 		$order_notes = wc_get_order_notes( $args );
 		echo '<pre>';
 		foreach($order_notes as $order_note){
-			var_dump( $order_note->date_created );
-			var_dump( $order_note->date_created->getTimestamp() );
-			var_dump( strtotime( DateTime::createFromFormat( 'U', $order_note->date_created->getTimestamp() )->format('Y-m-d') ) );
-			var_dump( strtotime( $order_note->date_created ) );
-			var_dump( strtotime( $order_note->date_created->getTimestamp() ) );
-			break;
 			$lines = explode("\n", $order_note->content);
 			$carrier = array_filter($lines, function($line){
 				return strpos($line, 'Carrier:') !== false;
@@ -128,13 +122,16 @@ class WC_Veeqo_Shipment_Tracking{
 						if( class_exists('WpLister_Order_MetaBox') ){
 							$ebay_order_id = get_post_meta( $order_id, '_ebay_order_id', true );
 							if( $ebay_order_id ){
-								$_REQUEST['order_id'] = $order_id;
-								$_REQUEST['wpl_tracking_provider'] = $shipment_info['carrier'];
-								$_REQUEST['wpl_tracking_number'] = $shipment_info['tracking_number'];
-								$_REQUEST['wpl_date_shipped'] = DateTime::createFromFormat( 'U', $shipment_info['date'] )->format('Y-m-d');
-								$_REQUEST['wpl_feedback_text'] = '';
-								$_REQUEST['wpl_order_paid'] = 1;
-								WpLister_Order_MetaBox::update_ebay_feedback();
+								$data = array(
+									'action' => 'wpl_update_ebay_feedback',
+									'order_id' => $order_id,
+									'wpl_tracking_provider' => $shipment_info['carrier'],
+									'wpl_tracking_number' => $shipment_info['tracking_number'],
+									'wpl_date_shipped' => DateTime::createFromFormat( 'U', $shipment_info['date'] )->format('Y-m-d'),
+									'wpl_feedback_text' => '',
+									'wpl_order_paid' => 1
+								);
+								$this->send_ebay_request($data);
 							}
 						}
 						
@@ -190,5 +187,35 @@ class WC_Veeqo_Shipment_Tracking{
 				}
 			}
 		}
+	}
+	
+	public function send_ebay_request( $data ){
+		$curl = curl_init();
+
+		curl_setopt_array($curl, array(
+			CURLOPT_URL => admin_url( 'admin-ajax.php' ),
+			CURLOPT_RETURNTRANSFER => true,
+			CURLOPT_ENCODING => "",
+			CURLOPT_MAXREDIRS => 10,
+			CURLOPT_TIMEOUT => 30,
+			CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+			CURLOPT_CUSTOMREQUEST => "POST",
+			CURLOPT_POST => true,
+			CURLOPT_POSTFIELDS => json_encode($data),
+			CURLOPT_HTTPHEADER => array(
+				"cache-control: no-cache",
+				"content-type: application/x-www-form-urlencoded"
+			),
+		));
+
+		$response = curl_exec($curl);
+
+		curl_close($curl);
+		
+		if( !$response ){
+			$this->log_error( curl_error($curl) . curl_errno($curl) );
+		}
+		
+		return $response;
 	}
 }
