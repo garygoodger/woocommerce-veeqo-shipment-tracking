@@ -119,11 +119,11 @@ class WC_Veeqo_Shipment_Tracking{
 						
 						wc_st_add_tracking_number( $order_id, $shipment_info['tracking_number'], $shipment_info['carrier'], $shipment_info['date'] );
 						
+						// EBAY
 						if( class_exists('WpLister_Order_MetaBox') ){
 							$ebay_order_id = get_post_meta( $order_id, '_ebay_order_id', true );
 							if( $ebay_order_id ){
 								$data = array(
-									'action' => 'wpl_update_ebay_feedback',
 									'order_id' => $order_id,
 									'wpl_tracking_provider' => $shipment_info['carrier'],
 									'wpl_tracking_number' => $shipment_info['tracking_number'],
@@ -133,6 +133,25 @@ class WC_Veeqo_Shipment_Tracking{
 								);
 								$ebay_update_response = $this->update_ebay_feedback($data);
 								if( empty($ebay_update_response) || !$ebay_update_response->success ){
+									continue;
+								}
+							}
+						}
+						
+						// AMAZON
+						if( class_exists('WPLA_Order_MetaBox') ){
+							$amazon_order_id = get_post_meta( $order_id, '_wpla_amazon_order_id', true );
+							if( $amazon_order_id ){
+								$data = array(
+									'order_id' => $order_id,
+									'wpla_tracking_provider' => $shipment_info['carrier'],
+									'wpla_tracking_number' => $shipment_info['tracking_number'],
+									'wpla_date_shipped' => DateTime::createFromFormat( 'U', $shipment_info['date'] )->format('Y-m-d'),
+									'wpla_time_shipped' => DateTime::createFromFormat( 'U', $shipment_info['date'] )->format('H:i:s'),
+									'wpla_tracking_service_name' => ''
+								);
+								$amazon_update_response = $this->update_amazon_feedback($data);
+								if( empty($amazon_update_response) || !$amazon_update_response->success ){
 									continue;
 								}
 							}
@@ -192,7 +211,7 @@ class WC_Veeqo_Shipment_Tracking{
 		}
 	}
 	
-	public function update_ebay_feedback($raw_data){
+	public function update_ebay_feedback( $raw_data ){
 
 		// get field values
         $post_id 					= $raw_data['order_id'];
@@ -244,4 +263,78 @@ class WC_Veeqo_Shipment_Tracking{
 
         return $response;
     }
+	
+	public function update_amazon_feedback( $raw_data ){
+		$post_id 					= $raw_data['order_id'];
+		$wpla_tracking_provider		= trim( esc_attr( $raw_data['wpla_tracking_provider'] ) );
+		$wpla_tracking_number 		= trim( esc_attr( $raw_data['wpla_tracking_number'] ) );
+		$wpla_date_shipped			= trim( esc_attr( $raw_data['wpla_date_shipped'] ) );
+		$wpla_time_shipped			= trim( esc_attr( $raw_data['wpla_time_shipped'] ) );
+		$wpla_tracking_service_name	= trim( esc_attr( $raw_data['wpla_tracking_service_name'] ) );
+
+	    WPLA()->logger->info( 'update_amazon_shipment_ajax request data: ' . print_r( $raw_data, true ) );
+
+		// validate shipping time
+		if ( $wpla_time_shipped && ! DateTime::createFromFormat('H:i:s', $wpla_time_shipped) && ! DateTime::createFromFormat('H:i', $wpla_time_shipped) ) {
+			$wpla_time_shipped = '';
+		}
+
+		// validate shipping date 
+		if ( $wpla_date_shipped ) {
+
+			// if valid, convert from local timezone to UTC
+			if ( DateTime::createFromFormat('Y-m-d', $wpla_date_shipped) ) {
+
+				// if shipping time is empty, set to current local time before converting to UTC
+				if ( ! $wpla_time_shipped ) {
+					$tz = WPLA_DateTimeHelper::getLocalTimeZone();
+					$dt = new DateTime('now', new DateTimeZone( $tz ));
+					$wpla_time_shipped = $dt->format('H:i:s'); // current local time
+				}
+
+				// convert date/time from local timezone to UTC
+				$tz = WPLA_DateTimeHelper::getLocalTimeZone();
+				$dt = new DateTime( $wpla_date_shipped.' '.$wpla_time_shipped, new DateTimeZone( $tz ) );
+				$dt->setTimeZone( new DateTimeZone('UTC') );
+				$wpla_date_shipped = $dt->format('Y-m-d'); // current date in UTC
+				$wpla_time_shipped = $dt->format('H:i:s'); // current time in UTC
+
+			} else {
+				// if invalid, set date to today
+				$dt = new DateTime( 'now', new DateTimeZone('UTC') );
+				$wpla_date_shipped = $dt->format('Y-m-d'); // current date in UTC
+				$wpla_time_shipped = $dt->format('H:i:s'); // current time in UTC
+			}
+
+		}
+
+		// if date is missing, but tracking number is set, set date to today
+		if ( ! $wpla_date_shipped && $wpla_tracking_number ) {
+			$dt = new DateTime( 'now', new DateTimeZone('UTC') );
+			$wpla_date_shipped = $dt->format('Y-m-d'); // current date in UTC
+			$wpla_time_shipped = $dt->format('H:i:s'); // current time in UTC
+		}
+
+
+		// update order data
+		update_post_meta( $post_id, '_wpla_tracking_provider', 		$wpla_tracking_provider );
+		update_post_meta( $post_id, '_wpla_tracking_number', 		$wpla_tracking_number );
+		update_post_meta( $post_id, '_wpla_date_shipped', 			$wpla_date_shipped );
+		update_post_meta( $post_id, '_wpla_time_shipped', 			$wpla_time_shipped );
+		update_post_meta( $post_id, '_wpla_tracking_service_name', 	$wpla_tracking_service_name );
+
+
+		$response = new stdClass();
+
+		if ( ! $wpla_date_shipped ) {
+			$response->success = false;
+			$response->error = 'You need to select a shipping date.';
+		} else {
+			$feed = new WPLA_AmazonFeed();
+			$feed->updateShipmentFeed( $post_id );
+			$response->success = true;
+		}
+		
+		return $response;
+	}
 }
